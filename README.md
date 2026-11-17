@@ -1,27 +1,17 @@
 # PesaWise
-DESCRIPTION
-An innovative financial literacy and inclusion application that equips individuals with essential
-money-management skills while connecting them to accessible financial services and opportunities.
 
-FEATURES & PAGES IMPLEMENTATION STATUS: [COMPLETED]
-1. ✅ Splash Screen
-   • Displays the centered PesaWise logo and tagline ("Your Smart Financial Journey") with a smooth pulse animation.
-   • Automatically transitions to the Landing Page after 2.5 seconds.
-2. ✅ Landing Page
-   • Welcomes the user with a curated description of PesaWise and feature highlights (Smart Budgeting, Expense Tracking, Financial Security).
-   • Has a prominent blue "Get Started" button routing to the Login/Signup screen.
-3. ✅ Login / Signup Page
-   • Supports dual tabs for Login and Sign Up (Full Name, Email, Password, Confirm Password).
-   • Includes a quick Demo / Guest shortcut.
-4. ✅ Bottom Navigation Bar & Dashboard
-   • Persistent bottom navigation bar with 3 tabs: Home (Dashboard), Budgeting, and Tracking.
-   • Dashboard displays current financial breakdown (Needs 50%, Wants 30%, Savings 20%) and the 2 main action buttons:
-     - "Budget your money"
-     - "Track your expense"
-5. ✅ Personal Budgeting Feature
-   • Salary input (e.g. KSh / $ income).
-   • Allocation presets (50/30/20 Rule, 70/20/10 Rule) and custom percentage sliders for Needs, Wants, and Savings.
-   • Real-time budget calculation engine showing exact category amounts and visual progress cards.
-6. ✅ Expense Tracking Feature
-   • Bank / M-Pesa statement upload simulator.
-   • Auto-calculates total spending and provides categorized transaction breakdowns (Housing, Groceries, Utilities, Transport, Entertainment).
+PesaWise is a financial literacy app. This repository now contains an Android starter app with Jetpack Compose authentication screens and a local SQLite database managed by Room.
+
+## Auth scaffold
+
+- Login and sign-up modes in one Compose screen
+- Basic email, password length, required name, and password confirmation validation
+- Local account creation and sign-in through a repository and ViewModel
+- Room `users` table with a unique email index
+- Passwords stored as PBKDF2-HMAC-SHA256 hashes with per-account random salts
+
+This is a local prototype. Password reset, terms links, session persistence, and production authentication should be connected to the app's account service before release. The database holds user records only on the device; uninstalling the app removes them.
+
+## Run
+
+Open this folder in Android Studio and sync Gradle. Use JDK 17 and an Android SDK that includes API 36. The application id is `com.pesawise.app` and the minimum Android version is API 26.
