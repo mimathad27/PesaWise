@@ -14,7 +14,8 @@ data class AuthUiState(
     val confirmPassword: String = "",
     val message: String? = null,
     val isError: Boolean = false,
-    val busy: Boolean = false
+    val busy: Boolean = false,
+    val loggedIn: Boolean = false
 )
 
 class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
@@ -41,7 +42,20 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
         viewModelScope.launch {
             val result = if (current.isSignUp) repository.register(current.fullName, current.email, current.password)
             else repository.signIn(current.email, current.password)
-            update { it.copy(busy = false, message = result.fold({ it }, { it.message ?: "Something went wrong." }), isError = result.isFailure) }
+
+            update {
+                it.copy(
+                    busy = false,
+                    message = result.fold({ msg -> msg }, { e -> e.message ?: "Something went wrong." }),
+                    isError = result.isFailure,
+                    // Only a successful sign-in opens the app, not a sign-up
+                    loggedIn = result.isSuccess && !current.isSignUp,
+                    // After sign-up, switch to the Log in tab and clear the passwords
+                    isSignUp = if (result.isSuccess && current.isSignUp) false else it.isSignUp,
+                    password = if (result.isSuccess) "" else it.password,
+                    confirmPassword = if (result.isSuccess) "" else it.confirmPassword
+                )
+            }
         }
     }
 }
