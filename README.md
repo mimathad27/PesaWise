@@ -1,16 +1,22 @@
 # PesaWise
 
-PesaWise is a financial literacy app. This repository now contains an Android starter app with Jetpack Compose authentication screens and a local SQLite database managed by Room.
+PesaWise is a financial literacy app. This Android app uses Jetpack Compose, Firebase Authentication, and Room persistence components.
 
-## Auth scaffold
+## Firebase authentication
 
 - Login and sign-up modes in one Compose screen
-- Basic email, password length, required name, and password confirmation validation
-- Local account creation and sign-in through a repository and ViewModel
-- Room `users` table with a unique email index
-- Passwords stored as PBKDF2-HMAC-SHA256 hashes with per-account random salts
+- Email validation, password checks, loading and error states
+- Firebase Authentication handles account creation, sign-in, and password-reset emails
+- Firebase stores the account profile and keeps the signed-in session across app launches
+- The signed-in app has Expenses and Account tabs, with password recovery and logout in Account
 
-This is a local prototype. Password reset, terms links, session persistence, and production authentication should be connected to the app's account service before release. The database holds user records only on the device; uninstalling the app removes them.
+### Firebase setup for teammates
+
+1. Keep `app/google-services.json` in the project. It contains Firebase app identifiers and is required to build the Android app.
+2. In the Firebase Console, open **Authentication → Sign-in method** and enable **Email/Password**.
+3. Sync Gradle in Android Studio and run the app.
+
+The Android package name registered with Firebase is `com.pesawise.app`. Password reset uses Firebase's configured email template and reset link. Local Room account records are no longer used for authentication.
 
 ## Run
 
