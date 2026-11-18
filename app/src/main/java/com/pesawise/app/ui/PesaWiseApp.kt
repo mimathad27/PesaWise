@@ -1,5 +1,13 @@
 package com.pesawise.app.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -7,7 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,6 +27,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.launch
 
 private val Navy = Color(0xFF102A43)
 private val Green = Color(0xFF0B8F70)
@@ -25,6 +38,9 @@ private val Canvas = Color(0xFFF5F8FA)
 @Composable
 fun PesaWiseApp(viewModel: AuthViewModel) {
     val state by viewModel.state
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var googleBusy by remember { mutableStateOf(false) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Canvas) {
         Column(
@@ -62,6 +78,63 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
                     Button(onClick = viewModel::submit, enabled = !state.busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Green)) {
                         Text(if (state.busy) "Please wait..." else if (state.isForgotPassword) "Send reset link" else if (state.isSignUp) "Create account" else "Log in", fontWeight = FontWeight.SemiBold)
                     }
+                    if (!state.isForgotPassword) {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            HorizontalDivider(Modifier.weight(1f))
+                            Text("  OR  ", color = Color(0xFF829AB1), fontSize = 12.sp)
+                            HorizontalDivider(Modifier.weight(1f))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val activity = context.findActivity()
+                                if (activity == null) {
+                                    viewModel.update { it.copy(message = "Google sign-in could not open. Please try again.", isError = true) }
+                                } else {
+                                    val clientIdResource = activity.resources.getIdentifier("default_web_client_id", "string", activity.packageName)
+                                    if (clientIdResource == 0) {
+                                        viewModel.update { it.copy(message = "Google sign-in needs the latest google-services.json. Download it from Firebase after enabling Google sign-in, then replace the app config file.", isError = true) }
+                                    } else {
+                                        googleBusy = true
+                                        viewModel.update { it.copy(message = null, isError = false) }
+                                        scope.launch {
+                                            try {
+                                                val googleSignInOption = GetSignInWithGoogleOption.Builder(
+                                                    activity.getString(clientIdResource)
+                                                ).build()
+                                                val request = GetCredentialRequest.Builder()
+                                                    .addCredentialOption(googleSignInOption)
+                                                    .build()
+                                                val result = CredentialManager.create(activity).getCredential(activity, request)
+                                                val credential = result.credential
+                                                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                                    val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                                                    viewModel.signInWithGoogle(googleCredential.idToken)
+                                                } else {
+                                                    viewModel.update { it.copy(message = "Google didn't return a supported sign-in credential. Try another account.", isError = true) }
+                                                }
+                                            } catch (error: GetCredentialException) {
+                                                if (error !is GetCredentialCancellationException) {
+                                                    viewModel.update { it.copy(message = error.localizedMessage ?: "Google sign-in failed. Please try again.", isError = true) }
+                                                }
+                                            } catch (error: Exception) {
+                                                viewModel.update { it.copy(message = error.localizedMessage ?: "Google sign-in failed. Please try again.", isError = true) }
+                                            } finally {
+                                                googleBusy = false
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !state.busy && !googleBusy,
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            if (googleBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(if (googleBusy) "Connecting to Google..." else "Continue with Google", color = Navy, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
                     if (!state.isForgotPassword) Text("Your account is securely managed by Firebase.", color = Color(0xFF829AB1), fontSize = 12.sp)
                 }
@@ -71,6 +144,12 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
             Spacer(Modifier.height(28.dp))
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable

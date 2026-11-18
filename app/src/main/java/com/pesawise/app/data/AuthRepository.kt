@@ -2,6 +2,7 @@ package com.pesawise.app.data
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.tasks.await
 
 class AuthRepository(private val auth: FirebaseAuth) {
@@ -17,9 +18,25 @@ class AuthRepository(private val auth: FirebaseAuth) {
         "Welcome back, ${result.user?.displayName?.takeIf { it.isNotBlank() } ?: email.trim()}!"
     }
 
+    suspend fun signInWithGoogle(idToken: String): Result<String> = runCatching {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        val result = auth.signInWithCredential(credential).await()
+        "Welcome${result.user?.displayName?.takeIf { it.isNotBlank() }?.let { ", $it" } ?: ""}!"
+    }
+
     suspend fun sendPasswordReset(email: String): Result<String> = runCatching {
         auth.sendPasswordResetEmail(email.trim()).await()
         "If an account exists for this email, a password reset link has been sent."
+    }
+
+    suspend fun updateDisplayName(name: String): Result<String> = runCatching {
+        val user = checkNotNull(auth.currentUser) { "You need to sign in again." }
+        user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name.trim()).build()).await()
+        "Profile name updated."
+    }
+
+    fun setLanguageCode(languageCode: String) {
+        auth.setLanguageCode(languageCode)
     }
 
     fun signOut() = auth.signOut()

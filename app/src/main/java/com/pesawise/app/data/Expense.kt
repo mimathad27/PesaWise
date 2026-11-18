@@ -28,5 +28,6 @@ data class Expense(
     val title: String,
     val amount: Double,
     val category: ExpenseCategory,
-    val dateMillis: Long = System.currentTimeMillis()
+    val dateMillis: Long = System.currentTimeMillis(),
+    val currencyCode: String = "KES"
 )

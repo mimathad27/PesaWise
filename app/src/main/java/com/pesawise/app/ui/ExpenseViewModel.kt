@@ -43,8 +43,8 @@ class ExpenseViewModel : ViewModel() {
 
     fun setFilter(category: ExpenseCategory?) { _filter.value = category }
 
-    fun addExpense(title: String, amount: Double, category: ExpenseCategory) {
-        _expenses.value = _expenses.value + Expense(nextId++, title.trim(), amount, category)
+    fun addExpense(title: String, amount: Double, category: ExpenseCategory, currencyCode: String = "KES") {
+        _expenses.value = _expenses.value + Expense(nextId++, title.trim(), amount, category, currencyCode = currencyCode)
     }
 
     /** Simulates importing a bank / M-Pesa statement and auto-categorizing it. */
