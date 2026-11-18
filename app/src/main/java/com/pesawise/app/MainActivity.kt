@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pesawise.app.ui.AuthViewModel
 import com.pesawise.app.ui.AuthViewModelFactory
+import com.pesawise.app.ui.ExpenseTrackingScreen
 import com.pesawise.app.ui.PesaWiseApp
 import com.pesawise.app.ui.theme.PesaWiseTheme
 
@@ -18,7 +19,12 @@ class MainActivity : ComponentActivity() {
                 val authViewModel: AuthViewModel = viewModel(
                     factory = AuthViewModelFactory(repository)
                 )
-                PesaWiseApp(authViewModel)
+
+                if (authViewModel.state.value.loggedIn) {
+                    ExpenseTrackingScreen()
+                } else {
+                    PesaWiseApp(authViewModel)
+                }
             }
         }
     }
