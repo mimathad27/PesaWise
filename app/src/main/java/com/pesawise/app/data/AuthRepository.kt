@@ -1,44 +1,37 @@
 package com.pesawise.app.data
 
-import android.util.Base64
-import java.security.SecureRandom
-import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.PBEKeySpec
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
+import kotlinx.coroutines.tasks.await
 
-class AuthRepository(private val userDao: UserDao) {
-    suspend fun register(fullName: String, email: String, password: String): Result<String> {
-        val normalizedEmail = email.trim().lowercase()
-        if (userDao.findByEmail(normalizedEmail) != null) return Result.failure(IllegalArgumentException("An account with this email already exists."))
-
-        val salt = ByteArray(16).also(SecureRandom()::nextBytes)
-        val user = UserAccount(
-            fullName = fullName.trim(),
-            email = normalizedEmail,
-            passwordHash = hashPassword(password, salt),
-            passwordSalt = Base64.encodeToString(salt, Base64.NO_WRAP)
-        )
-        return runCatching { userDao.insert(user) }.map { "Account created. You can now sign in." }
+class AuthRepository(private val auth: FirebaseAuth) {
+    suspend fun register(fullName: String, email: String, password: String): Result<String> = runCatching {
+        val result = auth.createUserWithEmailAndPassword(email.trim(), password).await()
+        result.user?.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(fullName.trim()).build())?.await()
+        auth.signOut()
+        "Account created. You can now sign in."
     }
 
-    suspend fun signIn(email: String, password: String): Result<String> {
-        val user = userDao.findByEmail(email.trim().lowercase())
-            ?: return Result.failure(IllegalArgumentException("Email or password is incorrect."))
-        val salt = Base64.decode(user.passwordSalt, Base64.NO_WRAP)
-        if (hashPassword(password, salt) != user.passwordHash) {
-            return Result.failure(IllegalArgumentException("Email or password is incorrect."))
-        }
-        return Result.success("Welcome back, ${user.fullName}!")
+    suspend fun signIn(email: String, password: String): Result<String> = runCatching {
+        val result = auth.signInWithEmailAndPassword(email.trim(), password).await()
+        "Welcome back, ${result.user?.displayName?.takeIf { it.isNotBlank() } ?: email.trim()}!"
     }
 
-    private fun hashPassword(password: String, salt: ByteArray): String {
-        val spec = PBEKeySpec(password.toCharArray(), salt, 120_000, 256)
-        return try {
-            Base64.encodeToString(
-                SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded,
-                Base64.NO_WRAP
-            )
-        } finally {
-            spec.clearPassword()
-        }
+    suspend fun sendPasswordReset(email: String): Result<String> = runCatching {
+        auth.sendPasswordResetEmail(email.trim()).await()
+        "If an account exists for this email, a password reset link has been sent."
+    }
+
+    fun signOut() = auth.signOut()
+
+    fun isSignedIn(): Boolean = auth.currentUser != null
+
+    fun currentProfile(): AuthProfile? = auth.currentUser?.let {
+        AuthProfile(it.displayName.orEmpty(), it.email.orEmpty())
     }
 }
+
+data class AuthProfile(
+    val fullName: String,
+    val email: String
+)

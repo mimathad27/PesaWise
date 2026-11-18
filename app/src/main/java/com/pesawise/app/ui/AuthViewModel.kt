@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 
 data class AuthUiState(
     val isSignUp: Boolean = false,
+    val isForgotPassword: Boolean = false,
     val fullName: String = "",
     val email: String = "",
     val password: String = "",
@@ -19,7 +20,7 @@ data class AuthUiState(
 )
 
 class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
-    var state = androidx.compose.runtime.mutableStateOf(AuthUiState())
+    var state = androidx.compose.runtime.mutableStateOf(AuthUiState(loggedIn = repository.isSignedIn()))
         private set
 
     fun update(transform: (AuthUiState) -> AuthUiState) { state.value = transform(state.value) }
@@ -29,7 +30,7 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(current.email.trim()).matches()) {
             update { it.copy(message = "Enter a valid email address.", isError = true) }; return
         }
-        if (current.password.length < 8) {
+        if (!current.isForgotPassword && current.password.length < 8) {
             update { it.copy(message = "Use a password with at least 8 characters.", isError = true) }; return
         }
         if (current.isSignUp && current.fullName.isBlank()) {
@@ -40,18 +41,19 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
         }
         update { it.copy(busy = true, message = null) }
         viewModelScope.launch {
-            val result = if (current.isSignUp) repository.register(current.fullName, current.email, current.password)
-            else repository.signIn(current.email, current.password)
-
+            val result = when {
+                current.isForgotPassword -> repository.sendPasswordReset(current.email)
+                current.isSignUp -> repository.register(current.fullName, current.email, current.password)
+                else -> repository.signIn(current.email, current.password)
+            }
             update {
                 it.copy(
                     busy = false,
                     message = result.fold({ msg -> msg }, { e -> e.message ?: "Something went wrong." }),
                     isError = result.isFailure,
-                    // Only a successful sign-in opens the app, not a sign-up
-                    loggedIn = result.isSuccess && !current.isSignUp,
-                    // After sign-up, switch to the Log in tab and clear the passwords
+                    loggedIn = result.isSuccess && !current.isSignUp && !current.isForgotPassword,
                     isSignUp = if (result.isSuccess && current.isSignUp) false else it.isSignUp,
+                    isForgotPassword = if (result.isSuccess && current.isForgotPassword) false else it.isForgotPassword,
                     password = if (result.isSuccess) "" else it.password,
                     confirmPassword = if (result.isSuccess) "" else it.confirmPassword
                 )
