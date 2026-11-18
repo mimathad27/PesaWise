@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material3.Button
@@ -38,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,6 +53,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val stateHolder = rememberSaveableStateHolder()
 
     Scaffold(
         bottomBar = {
@@ -64,6 +67,12 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Filled.PieChart, contentDescription = null) },
+                    label = { Text("Budget") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
                     icon = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
                     label = { Text("Account") }
                 )
@@ -71,16 +80,18 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
         }
     ) { innerPadding ->
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
-            if (selectedTab == 0) {
-                ExpenseTrackingScreen()
-            } else {
-                AccountScreen(
-                    authRepository = authRepository,
-                    onLogout = {
-                        authRepository.signOut()
-                        authViewModel.update { it.copy(loggedIn = false, message = null, isError = false) }
-                    }
-                )
+            stateHolder.SaveableStateProvider(key = selectedTab) {
+                when (selectedTab) {
+                    0 -> ExpenseTrackingScreen()
+                    1 -> BudgetingScreen()
+                    else -> AccountScreen(
+                        authRepository = authRepository,
+                        onLogout = {
+                            authRepository.signOut()
+                            authViewModel.update { it.copy(loggedIn = false, message = null, isError = false) }
+                        }
+                    )
+                }
             }
         }
     }
