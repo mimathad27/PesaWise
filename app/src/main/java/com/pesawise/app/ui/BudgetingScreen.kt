@@ -32,21 +32,27 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.NumberFormat
 import java.util.Locale
+import com.pesawise.app.data.CurrencyRatesRepository
 
 private data class BudgetBucket(
     val name: String,
@@ -66,12 +72,27 @@ private val allocationPresets = mapOf(
     "60 / 20 / 20" to listOf(60, 20, 20)
 )
 
-private fun formatBudgetKsh(amount: Double): String =
-    "KSh " + NumberFormat.getNumberInstance(Locale.US).apply { maximumFractionDigits = 0 }.format(amount)
+private fun formatBudgetCurrency(amount: Double, currencyCode: String): String =
+    "${budgetCurrencySymbol(currencyCode)} " + NumberFormat.getNumberInstance(Locale.US).apply { maximumFractionDigits = 2 }.format(amount)
+
+private fun budgetCurrencySymbol(code: String) = when (code) {
+    "KES" -> "KSh"
+    "USD" -> "$"
+    "EUR" -> "€"
+    "GBP" -> "£"
+    "UGX" -> "USh"
+    "TZS" -> "TSh"
+    else -> code
+}
 
 @Composable
-fun BudgetingScreen() {
+fun BudgetingScreen(currencyCode: String = "KES", budgetCycle: String = "Monthly", hideAmounts: Boolean = false) {
+    val context = LocalContext.current
+    val ratesRepository = remember { CurrencyRatesRepository(context) }
     var incomeText by rememberSaveable { mutableStateOf("") }
+    var incomeCurrencyCode by rememberSaveable { mutableStateOf(currencyCode) }
+    var incomeRateUnavailable by remember { mutableStateOf(false) }
+    var incomeWasConverted by remember { mutableStateOf(false) }
     var selectedPreset by rememberSaveable { mutableStateOf("50 / 30 / 20") }
     var customNeeds by rememberSaveable { mutableStateOf("50") }
     var customWants by rememberSaveable { mutableStateOf("30") }
@@ -82,6 +103,28 @@ fun BudgetingScreen() {
     val allocation = if (selectedPreset == "Custom") customValues else allocationPresets[selectedPreset] ?: allocationPresets.getValue("50 / 30 / 20")
     val allocationTotal = allocation.sum()
     val allocationValid = allocation.all { it in 0..100 } && allocationTotal == 100
+    val budgetCurrencyCode = if (incomeCurrencyCode != currencyCode || incomeRateUnavailable) incomeCurrencyCode else currencyCode
+
+    LaunchedEffect(currencyCode) {
+        val sourceCode = incomeCurrencyCode
+        if (sourceCode == currencyCode) {
+            incomeRateUnavailable = false
+            incomeWasConverted = false
+        } else {
+            incomeRateUnavailable = false
+            incomeWasConverted = false
+            val rate = ratesRepository.rate(sourceCode, currencyCode)
+            if (rate == null) {
+                incomeRateUnavailable = true
+            } else {
+                incomeText.toDoubleOrNull()?.let { previousIncome ->
+                    incomeText = String.format(Locale.US, "%.2f", previousIncome * rate).trimEnd('0').trimEnd('.')
+                }
+                incomeCurrencyCode = currencyCode
+                incomeWasConverted = true
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -92,7 +135,7 @@ fun BudgetingScreen() {
             Column {
                 Text("My budget", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                Text("Plan your monthly income with confidence.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Plan income for your selected cycle.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -104,19 +147,23 @@ fun BudgetingScreen() {
                 Column(Modifier.fillMaxWidth().padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-                        Text("MONTHLY TAKE-HOME INCOME", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .82f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${budgetCycle.uppercase()} TAKE-HOME INCOME", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .82f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = incomeText,
                         onValueChange = { input ->
-                            if (input.length <= 12 && input.all { it.isDigit() || it == '.' }) incomeText = input
+                            if (input.length <= 12 && input.all { it.isDigit() || it == '.' }) {
+                                incomeText = input
+                                incomeWasConverted = false
+                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("e.g. 85000", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .5f)) },
-                        prefix = { Text("KSh ", color = MaterialTheme.colorScheme.onSurface) },
+                        prefix = { Text("${budgetCurrencySymbol(incomeCurrencyCode)} ", color = MaterialTheme.colorScheme.onSurface) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        visualTransformation = if (hideAmounts) PasswordVisualTransformation() else VisualTransformation.None,
                         shape = RoundedCornerShape(14.dp),
                         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = Color.White,
@@ -127,6 +174,8 @@ fun BudgetingScreen() {
                     )
                     Spacer(Modifier.height(8.dp))
                     Text("Enter your income after tax and deductions", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .78f), style = MaterialTheme.typography.bodySmall)
+                    if (incomeWasConverted) Text("Income converted using the latest available reference rate.", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .78f), style = MaterialTheme.typography.bodySmall)
+                    if (incomeRateUnavailable) Text("Exchange rate unavailable. This budget remains in $incomeCurrencyCode.", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -171,7 +220,7 @@ fun BudgetingScreen() {
 
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Your monthly plan", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Your $budgetCycle plan", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color(0xFFE39A32), modifier = Modifier.size(18.dp))
             }
         }
@@ -186,7 +235,7 @@ fun BudgetingScreen() {
             items(budgetBuckets.size) { index ->
                 val bucket = budgetBuckets[index]
                 val percent = allocation[index]
-                BudgetBucketCard(bucket, percent, income * percent / 100.0)
+                BudgetBucketCard(bucket, percent, income * percent / 100.0, budgetCurrencyCode, budgetCycle, hideAmounts)
             }
         }
 
@@ -221,7 +270,7 @@ private fun AllocationInput(label: String, value: String, onValueChange: (String
 }
 
 @Composable
-private fun BudgetBucketCard(bucket: BudgetBucket, percent: Int, amount: Double) {
+private fun BudgetBucketCard(bucket: BudgetBucket, percent: Int, amount: Double, currencyCode: String, budgetCycle: String, hideAmounts: Boolean) {
     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -241,8 +290,8 @@ private fun BudgetBucketCard(bucket: BudgetBucket, percent: Int, amount: Double)
                 trackColor = bucket.color.copy(alpha = .12f)
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Monthly amount", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                Text(formatBudgetKsh(amount), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Amount per $budgetCycle", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text(if (hideAmounts) "••••••" else formatBudgetCurrency(amount, currencyCode), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
         }
     }
