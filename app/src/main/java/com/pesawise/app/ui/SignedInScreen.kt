@@ -160,7 +160,7 @@ private fun AccountScreen(
             onSelect = { code -> appSettings.update { it.copy(currencyCode = code) } }
         )
         PreferencePicker(
-            title = "Language for Firebase emails",
+            title = "Email language",
             value = if (settings.languageCode == "sw") "Kiswahili" else "English",
             options = listOf("English", "Kiswahili"),
             onSelect = { language ->

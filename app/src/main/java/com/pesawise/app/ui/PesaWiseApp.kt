@@ -9,12 +9,19 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
@@ -25,15 +32,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
-private val Navy = Color(0xFF102A43)
-private val Green = Color(0xFF0B8F70)
-private val Canvas = Color(0xFFF5F8FA)
+private val Navy = Color(0xFF142B42)
+private val Green = Color(0xFF0AAD62)
+private val Canvas = Color(0xFFF4F6F8)
+private val Slate = Color(0xFF71869A)
 
 @Composable
 fun PesaWiseApp(viewModel: AuthViewModel) {
@@ -44,29 +53,33 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
 
     Surface(modifier = Modifier.fillMaxSize(), color = Canvas) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(52.dp))
-            Box(Modifier.size(58.dp).background(Green, RoundedCornerShape(18.dp)), Alignment.Center) {
-                Text("P", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(12.dp))
-            Text("PesaWise", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Navy)
-            Text("Your smart financial journey", color = Color(0xFF627D98))
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(38.dp))
+            Text("PesaWise", fontSize = 25.sp, fontWeight = FontWeight.Medium, color = Navy)
+            Spacer(Modifier.height(5.dp))
+            Text("Your smart financial journey", color = Slate, fontSize = 14.sp)
+            Spacer(Modifier.height(42.dp))
 
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(24.dp)) {
-                Column(Modifier.fillMaxWidth().padding(24.dp)) {
-                    Text(if (state.isForgotPassword) "Reset your password" else if (state.isSignUp) "Create your account" else "Welcome back", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Navy)
-                    Spacer(Modifier.height(6.dp))
-                    Text(if (state.isForgotPassword) "Enter your account email to receive a secure reset link." else if (state.isSignUp) "Start building healthier money habits." else "Sign in to continue your journey.", color = Color(0xFF627D98))
-                    Spacer(Modifier.height(22.dp))
-                    if (!state.isForgotPassword) Row(Modifier.fillMaxWidth().background(Canvas, RoundedCornerShape(12.dp)).padding(4.dp)) {
-                        AuthTab("Log in", !state.isSignUp, Modifier.weight(1f)) { viewModel.update { it.copy(isSignUp = false, message = null) } }
-                        AuthTab("Sign up", state.isSignUp, Modifier.weight(1f)) { viewModel.update { it.copy(isSignUp = true, message = null) } }
-                    }
-                    Spacer(Modifier.height(20.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 26.dp)) {
+                    Text(
+                        if (state.isForgotPassword) "Forgot password?" else if (state.isSignUp) "Create an account" else "Welcome back",
+                        modifier = Modifier.fillMaxWidth(), fontSize = 25.sp,
+                        fontWeight = FontWeight.SemiBold, color = Navy, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        if (state.isForgotPassword) "We’ll email you a link to reset it." else if (state.isSignUp) "A clearer view of your money starts here." else "Log in to continue your journey.",
+                        modifier = Modifier.fillMaxWidth(), color = Slate, fontSize = 14.sp, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    if (!state.isForgotPassword) Spacer(Modifier.height(4.dp))
                     if (state.isSignUp && !state.isForgotPassword) AuthField("Full name", state.fullName, { value -> viewModel.update { it.copy(fullName = value) } })
                     AuthField("Email address", state.email, { value -> viewModel.update { it.copy(email = value) } }, KeyboardType.Email)
                     if (!state.isForgotPassword) AuthField("Password", state.password, { value -> viewModel.update { it.copy(password = value) } }, secret = true)
@@ -75,8 +88,8 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
                     if (state.isForgotPassword) TextButton(onClick = { viewModel.update { it.copy(isForgotPassword = false, message = null) } }, modifier = Modifier.align(Alignment.End)) { Text("Back to log in") }
                     state.message?.let { Text(it, color = if (state.isError) MaterialTheme.colorScheme.error else Green, modifier = Modifier.padding(vertical = 8.dp)) }
                     Spacer(Modifier.height(8.dp))
-                    Button(onClick = viewModel::submit, enabled = !state.busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Green)) {
-                        Text(if (state.busy) "Please wait..." else if (state.isForgotPassword) "Send reset link" else if (state.isSignUp) "Create account" else "Log in", fontWeight = FontWeight.SemiBold)
+                    Button(onClick = viewModel::submit, enabled = !state.busy, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Green)) {
+                        Text(if (state.busy) "Please wait..." else if (state.isForgotPassword) "Send reset link" else if (state.isSignUp) "Sign up" else "Log in", fontWeight = FontWeight.Medium)
                     }
                     if (!state.isForgotPassword) {
                         Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -88,11 +101,11 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
                             onClick = {
                                 val activity = context.findActivity()
                                 if (activity == null) {
-                                    viewModel.update { it.copy(message = "Google sign-in could not open. Please try again.", isError = true) }
+                                    viewModel.update { it.copy(message = "Google sign-in isn't available right now. Please try again.", isError = true) }
                                 } else {
                                     val clientIdResource = activity.resources.getIdentifier("default_web_client_id", "string", activity.packageName)
                                     if (clientIdResource == 0) {
-                                        viewModel.update { it.copy(message = "Google sign-in needs the latest google-services.json. Download it from Firebase after enabling Google sign-in, then replace the app config file.", isError = true) }
+                                        viewModel.update { it.copy(message = "Google sign-in isn't available right now. Please use your email and password.", isError = true) }
                                     } else {
                                         googleBusy = true
                                         viewModel.update { it.copy(message = null, isError = false) }
@@ -110,7 +123,7 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
                                                     val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
                                                     viewModel.signInWithGoogle(googleCredential.idToken)
                                                 } else {
-                                                    viewModel.update { it.copy(message = "Google didn't return a supported sign-in credential. Try another account.", isError = true) }
+                                                    viewModel.update { it.copy(message = "Google couldn't complete sign in. Try another account.", isError = true) }
                                                 }
                                             } catch (error: GetCredentialException) {
                                                 if (error !is GetCredentialCancellationException) {
@@ -126,8 +139,10 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
                                 }
                             },
                             enabled = !state.busy && !googleBusy,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
-                            shape = RoundedCornerShape(14.dp)
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            border = BorderStroke(1.dp, Color(0xFFE3E7EA)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Navy)
                         ) {
                             if (googleBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             else Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -135,13 +150,19 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
                             Text(if (googleBusy) "Connecting to Google..." else "Continue with Google", color = Navy, fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    if (!state.isForgotPassword) Text("Your account is securely managed by Firebase.", color = Color(0xFF829AB1), fontSize = 12.sp)
+                    if (!state.isForgotPassword) TextButton(
+                        onClick = { viewModel.update { it.copy(isSignUp = !it.isSignUp, message = null) } },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        Text(
+                            if (state.isSignUp) "Already have an account? Log in" else "New to PesaWise? Create an account",
+                            color = Slate, fontSize = 13.sp, textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(22.dp))
-            Text("By continuing, you agree to our Terms of Service and Privacy Policy.", color = Color(0xFF829AB1), fontSize = 12.sp)
-            Spacer(Modifier.height(28.dp))
+            Text("By continuing, you agree to our Terms of Service and Privacy Policy.", color = Color(0xFF8293A2), fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp))
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
@@ -153,13 +174,6 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 @Composable
-private fun AuthTab(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = modifier, colors = ButtonDefaults.textButtonColors(contentColor = if (selected) Navy else Color(0xFF627D98))) {
-        Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
-    }
-}
-
-@Composable
 private fun AuthField(
     label: String,
     value: String,
@@ -168,18 +182,41 @@ private fun AuthField(
     secret: Boolean = false
 ) {
     var show by remember { mutableStateOf(false) }
-    Column(Modifier.padding(bottom = 14.dp)) {
-        Text(label, fontWeight = FontWeight.Medium, color = Navy)
-        Spacer(Modifier.height(6.dp))
+    Column(Modifier.padding(bottom = 13.dp)) {
+        Text(label, fontWeight = FontWeight.Medium, color = Navy, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp, bottom = 5.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(24.dp),
+            placeholder = { Text(if (secret) "Enter your password" else "", color = Color(0xFF9AA8B4)) },
+            leadingIcon = {
+                Icon(
+                    imageVector = when {
+                        secret -> Icons.Outlined.Lock
+                        keyboardType == KeyboardType.Email -> Icons.Outlined.Email
+                        else -> Icons.Outlined.Person
+                    },
+                    contentDescription = null,
+                    tint = Color(0xFF788995),
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Green,
+                unfocusedBorderColor = Color(0xFFE1E5E8),
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+                cursorColor = Green
+            ),
             keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.Password else keyboardType),
             visualTransformation = if (secret && !show) PasswordVisualTransformation() else VisualTransformation.None,
-            trailingIcon = if (secret) ({ TextButton(onClick = { show = !show }) { Text(if (show) "Hide" else "Show") } }) else null
+            trailingIcon = if (secret) ({
+                IconButton(onClick = { show = !show }) {
+                    Icon(if (show) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, contentDescription = if (show) "Hide password" else "Show password", tint = Color(0xFF788995))
+                }
+            }) else null
         )
     }
 }
