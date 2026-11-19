@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pesawise.app.ui.AuthViewModel
 import com.pesawise.app.ui.AuthViewModelFactory
+import com.pesawise.app.ui.AppLaunchSplashScreen
 import com.pesawise.app.ui.OnboardingScreen
 import com.pesawise.app.ui.PesaWiseApp
 import com.pesawise.app.ui.SignedInScreen
@@ -23,10 +24,13 @@ class MainActivity : ComponentActivity() {
                 val onboardingComplete = remember {
                     mutableStateOf(onboardingPrefs.getBoolean("complete", false))
                 }
+                val splashFinished = remember { mutableStateOf(false) }
                 val authViewModel: AuthViewModel = viewModel(
                     factory = AuthViewModelFactory(app.authRepository)
                 )
-                if (authViewModel.state.value.loggedIn) {
+                if (!splashFinished.value) {
+                    AppLaunchSplashScreen(onFinished = { splashFinished.value = true })
+                } else if (authViewModel.state.value.loggedIn) {
                     SignedInScreen(authViewModel, app.authRepository)
                 } else if (!onboardingComplete.value) {
                     OnboardingScreen(
