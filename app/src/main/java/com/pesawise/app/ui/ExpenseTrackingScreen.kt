@@ -11,7 +11,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pesawise.app.data.Expense
 import com.pesawise.app.data.ExpenseCategory
 import com.pesawise.app.data.CurrencyRatesRepository
+import com.pesawise.app.data.PesaWiseDatabase
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -46,17 +49,22 @@ private fun formatDate(millis: Long) =
 
 @Composable
 fun ExpenseTrackingScreen(
+    userId: String,
     currencyCode: String = "KES",
-    hideAmounts: Boolean = false,
-    viewModel: ExpenseViewModel = viewModel()
+    hideAmounts: Boolean = false
 ) {
     val context = LocalContext.current
     val ratesRepository = remember { CurrencyRatesRepository(context) }
+    val database = remember(context) { PesaWiseDatabase.getInstance(context) }
+    val factory = remember(database, userId) { ExpenseViewModelFactory(database.expenseDao(), userId) }
+    val viewModel: ExpenseViewModel = viewModel(key = "expenses-$userId", factory = factory)
     val allExpenses by viewModel.expenses.collectAsState()
     val visible by viewModel.visibleExpenses.collectAsState()
     val filter by viewModel.filter.collectAsState()
-    val importing by viewModel.isImporting.collectAsState()
+    val message by viewModel.message.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
+    var editingExpense by remember { mutableStateOf<Expense?>(null) }
+    var deletingExpense by remember { mutableStateOf<Expense?>(null) }
     var rates by remember(currencyCode) { mutableStateOf(mapOf(currencyCode to 1.0)) }
     var loadingRates by remember { mutableStateOf(false) }
     var missingRates by remember { mutableStateOf(false) }
@@ -96,10 +104,16 @@ fun ExpenseTrackingScreen(
                 )
             }
 
-            // 2. Upload card
-            item { UploadCard(importing = importing, onClick = viewModel::importStatement) }
+            if (message != null) item {
+                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(message.orEmpty(), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                        TextButton(onClick = viewModel::clearMessage) { Text("Dismiss") }
+                    }
+                }
+            }
 
-            // 3. Total card (all expenses; swap allExpenses -> visible to follow the filter)
+            // Total card includes every saved expense.
             item {
                 if (loadingRates) {
                     Text("Updating currency conversions…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -155,7 +169,14 @@ fun ExpenseTrackingScreen(
             } else {
                 items(visible, key = { it.id }) { expense ->
                     val rate = rates[expense.currencyCode]
-                    ExpenseRow(expense, hideAmounts, currencyCode, rate)
+                    ExpenseRow(
+                        expense = expense,
+                        hideAmounts = hideAmounts,
+                        displayCurrencyCode = currencyCode,
+                        rate = rate,
+                        onEdit = { editingExpense = expense },
+                        onDelete = { deletingExpense = expense }
+                    )
                 }
             }
 
@@ -163,7 +184,6 @@ fun ExpenseTrackingScreen(
         }
     }
 
-    // 5. Add expense dialog
     if (showDialog) {
         AddExpenseDialog(
             onDismiss = { showDialog = false },
@@ -174,37 +194,32 @@ fun ExpenseTrackingScreen(
             }
         )
     }
-}
 
-@Composable
-private fun UploadCard(importing: Boolean, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !importing, onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (importing) {
-                CircularProgressIndicator(modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
-            } else {
-                Icon(Icons.Filled.UploadFile, contentDescription = null, modifier = Modifier.size(32.dp))
+    editingExpense?.let { expense ->
+        AddExpenseDialog(
+            initialExpense = expense,
+            onDismiss = { editingExpense = null },
+            currencyCode = expense.currencyCode,
+            onSave = { title, amount, category, code ->
+                viewModel.updateExpense(expense, title, amount, category, code)
+                editingExpense = null
             }
-            Column {
-                Text(
-                    if (importing) "Importing & categorizing…" else "Upload Bank / M-Pesa Statement",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "Tap to import and auto-categorize transactions",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
+        )
+    }
+
+    deletingExpense?.let { expense ->
+        AlertDialog(
+            onDismissRequest = { deletingExpense = null },
+            title = { Text("Delete expense?") },
+            text = { Text("\"${expense.title}\" will be removed from your expense history.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteExpense(expense)
+                    deletingExpense = null
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deletingExpense = null }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -235,7 +250,14 @@ private fun TotalCard(totals: Map<String, Double>, count: Int, hideAmounts: Bool
 }
 
 @Composable
-private fun ExpenseRow(expense: Expense, hideAmounts: Boolean, displayCurrencyCode: String, rate: Double?) {
+private fun ExpenseRow(
+    expense: Expense,
+    hideAmounts: Boolean,
+    displayCurrencyCode: String,
+    rate: Double?,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -266,19 +288,38 @@ private fun ExpenseRow(expense: Expense, hideAmounts: Boolean, displayCurrencyCo
             val shownCode = if (rate == null) expense.currencyCode else displayCurrencyCode
             val shownAmount = if (rate == null) expense.amount else expense.amount * rate
             Text("- ${visibleAmount(shownAmount, shownCode, hideAmounts)}", fontWeight = FontWeight.Bold)
+            var menuExpanded by remember(expense.id) { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Expense options")
+                }
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                        onClick = { menuExpanded = false; onEdit() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        leadingIcon = { Icon(Icons.Filled.DeleteOutline, contentDescription = null) },
+                        onClick = { menuExpanded = false; onDelete() }
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun AddExpenseDialog(
+    initialExpense: Expense? = null,
     onDismiss: () -> Unit,
     currencyCode: String,
     onSave: (String, Double, ExpenseCategory, String) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var amountText by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(ExpenseCategory.FOOD) }
+    var title by remember(initialExpense?.id) { mutableStateOf(initialExpense?.title.orEmpty()) }
+    var amountText by remember(initialExpense?.id) { mutableStateOf(initialExpense?.amount?.toString().orEmpty()) }
+    var category by remember(initialExpense?.id) { mutableStateOf(initialExpense?.category ?: ExpenseCategory.FOOD) }
     var menuOpen by remember { mutableStateOf(false) }
 
     val amount = amountText.toDoubleOrNull()
@@ -286,7 +327,7 @@ private fun AddExpenseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Expense") },
+        title = { Text(if (initialExpense == null) "Add Expense" else "Edit Expense") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -329,7 +370,7 @@ private fun AddExpenseDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = { onSave(title, amount!!, category, currencyCode) }) { Text("Save") }
+            TextButton(enabled = valid, onClick = { onSave(title, amount!!, category, currencyCode) }) { Text(if (initialExpense == null) "Save" else "Save changes") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

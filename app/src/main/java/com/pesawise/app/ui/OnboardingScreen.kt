@@ -14,9 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,7 +58,7 @@ private val onboardingPages = listOf(
     OnboardingPage(
         "Know where your money goes",
         "Record your expenses and see your spending clearly, all in one place.",
-        Icons.Filled.ReceiptLong,
+        Icons.AutoMirrored.Filled.ReceiptLong,
         "KSh 2,450",
         "Tracked this week"
     ),
