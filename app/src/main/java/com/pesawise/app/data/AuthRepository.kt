@@ -43,6 +43,8 @@ class AuthRepository(private val auth: FirebaseAuth) {
 
     fun isSignedIn(): Boolean = auth.currentUser != null
 
+    fun currentUserId(): String? = auth.currentUser?.uid
+
     fun currentProfile(): AuthProfile? = auth.currentUser?.let {
         AuthProfile(it.displayName.orEmpty(), it.email.orEmpty())
     }

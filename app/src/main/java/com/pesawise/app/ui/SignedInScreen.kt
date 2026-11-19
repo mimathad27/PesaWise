@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val userId = authRepository.currentUserId()
     val stateHolder = rememberSaveableStateHolder()
     val context = LocalContext.current
     val appSettings = remember { AppSettingsStore(context) }
@@ -89,7 +90,11 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             stateHolder.SaveableStateProvider(key = selectedTab) {
                 when (selectedTab) {
-                    0 -> ExpenseTrackingScreen(currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode)
+                    0 -> if (userId != null) {
+                        ExpenseTrackingScreen(userId = userId, currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode)
+                    } else {
+                        Text("Your session has expired. Please sign in again.", modifier = Modifier.padding(24.dp))
+                    }
                     1 -> BudgetingScreen(currencyCode = settings.currencyCode, budgetCycle = settings.budgetCycle, hideAmounts = settings.privacyMode)
                     else -> AccountScreen(
                         authRepository = authRepository,
