@@ -19,7 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,15 +33,21 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +57,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val stateHolder = rememberSaveableStateHolder()
+    val context = LocalContext.current
+    val appSettings = remember { AppSettingsStore(context) }
+    val settings by appSettings.state
 
     Scaffold(
         bottomBar = {
@@ -64,6 +74,12 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Filled.PieChart, contentDescription = null) },
+                    label = { Text("Budget") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
                     icon = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
                     label = { Text("Account") }
                 )
@@ -71,27 +87,38 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
         }
     ) { innerPadding ->
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
-            if (selectedTab == 0) {
-                ExpenseTrackingScreen()
-            } else {
-                AccountScreen(
-                    authRepository = authRepository,
-                    onLogout = {
-                        authRepository.signOut()
-                        authViewModel.update { it.copy(loggedIn = false, message = null, isError = false) }
-                    }
-                )
+            stateHolder.SaveableStateProvider(key = selectedTab) {
+                when (selectedTab) {
+                    0 -> ExpenseTrackingScreen(currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode)
+                    1 -> BudgetingScreen(currencyCode = settings.currencyCode, budgetCycle = settings.budgetCycle, hideAmounts = settings.privacyMode)
+                    else -> AccountScreen(
+                        authRepository = authRepository,
+                        appSettings = appSettings,
+                        settings = settings,
+                        onLogout = {
+                            authRepository.signOut()
+                            authViewModel.update { it.copy(loggedIn = false, message = null, isError = false) }
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AccountScreen(authRepository: AuthRepository, onLogout: () -> Unit) {
+private fun AccountScreen(
+    authRepository: AuthRepository,
+    appSettings: AppSettingsStore,
+    settings: AppSettings,
+    onLogout: () -> Unit
+) {
     val profile = authRepository.currentProfile()
     val scope = rememberCoroutineScope()
     var sendingReset by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var nameDraft by remember { mutableStateOf("") }
     val displayName = profile?.fullName?.takeIf { it.isNotBlank() } ?: "PesaWise member"
     val email = profile?.email.orEmpty()
     val initial = displayName.firstOrNull()?.uppercase() ?: "P"
@@ -122,9 +149,43 @@ private fun AccountScreen(authRepository: AuthRepository, onLogout: () -> Unit) 
                 Text(email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        TextButton(onClick = { nameDraft = displayName; showNameDialog = true }) { Text("Edit name") }
 
         Spacer(Modifier.height(18.dp))
-        Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text("Preferences", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        PreferencePicker(
+            title = "Display currency",
+            value = settings.currencyCode,
+            options = listOf("KES", "USD", "EUR", "GBP", "UGX", "TZS"),
+            onSelect = { code -> appSettings.update { it.copy(currencyCode = code) } }
+        )
+        PreferencePicker(
+            title = "Language for Firebase emails",
+            value = if (settings.languageCode == "sw") "Kiswahili" else "English",
+            options = listOf("English", "Kiswahili"),
+            onSelect = { language ->
+                val code = if (language == "Kiswahili") "sw" else "en"
+                appSettings.update { it.copy(languageCode = code) }
+                authRepository.setLanguageCode(code)
+            }
+        )
+        PreferencePicker(
+            title = "Budget cycle",
+            value = settings.budgetCycle,
+            options = listOf("Monthly", "Weekly", "Every 2 weeks"),
+            onSelect = { cycle -> appSettings.update { it.copy(budgetCycle = cycle) } }
+        )
+        ListItem(
+            headlineContent = { Text("Privacy mode") },
+            supportingContent = { Text("Hide balances and amounts on this device") },
+            trailingContent = {
+                Switch(checked = settings.privacyMode, onCheckedChange = { enabled -> appSettings.update { it.copy(privacyMode = enabled) } })
+            }
+        )
+        Text("Budgets and expense entries display in this currency. Existing records are converted with the latest available reference rate; saved amounts stay in their original currency.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Spacer(Modifier.height(18.dp))
+        Text("Security", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         ListItem(
             headlineContent = { Text("Password & security") },
             supportingContent = { Text("Email a secure password reset link") },
@@ -145,13 +206,6 @@ private fun AccountScreen(authRepository: AuthRepository, onLogout: () -> Unit) 
                 ) { Text(if (sendingReset) "Sending…" else "Reset") }
             }
         )
-        HorizontalDivider()
-        ListItem(
-            headlineContent = { Text("Currency") },
-            supportingContent = { Text("Kenyan shilling (KSh)") },
-            leadingContent = { Icon(Icons.Filled.CurrencyExchange, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-        )
-
         feedback?.let {
             Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
                 Text(it, modifier = Modifier.fillMaxWidth().padding(14.dp), color = MaterialTheme.colorScheme.onSecondaryContainer)
@@ -171,4 +225,44 @@ private fun AccountScreen(authRepository: AuthRepository, onLogout: () -> Unit) 
         }
         Spacer(Modifier.height(28.dp))
     }
+
+    if (showNameDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            title = { Text("Edit profile name") },
+            text = {
+                OutlinedTextField(value = nameDraft, onValueChange = { nameDraft = it }, label = { Text("Full name") }, singleLine = true)
+            },
+            confirmButton = {
+                TextButton(enabled = nameDraft.isNotBlank() && !sendingReset, onClick = {
+                    scope.launch {
+                        sendingReset = true
+                        feedback = authRepository.updateDisplayName(nameDraft).fold({ it }, { it.message ?: "Could not update your name." })
+                        sendingReset = false
+                        showNameDialog = false
+                    }
+                }) { Text(if (sendingReset) "Saving..." else "Save") }
+            },
+            dismissButton = { TextButton(onClick = { showNameDialog = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun PreferencePicker(title: String, value: String, options: List<String>, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(value) },
+        trailingContent = {
+            Box {
+                TextButton(onClick = { expanded = true }) { Text("Change") }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    options.forEach { option ->
+                        DropdownMenuItem(text = { Text(option) }, onClick = { onSelect(option); expanded = false })
+                    }
+                }
+            }
+        }
+    )
 }

@@ -12,7 +12,20 @@
           "package_name": "com.pesawise.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "238976965008-oqslkalc611jlphp1qofena6blohnsog.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pesawise.app",
+            "certificate_hash": "af0597610e7b820a039838ae1ebc80efd70f39f1"
+          }
+        },
+        {
+          "client_id": "238976965008-g1jlhvk4c7trhafrjbatk01o36g4lrim.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBJFq5_C6D-9taq47RGBk1ccF-ktpGkKCA"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "238976965008-g1jlhvk4c7trhafrjbatk01o36g4lrim.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

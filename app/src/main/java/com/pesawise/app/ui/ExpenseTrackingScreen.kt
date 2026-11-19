@@ -18,27 +18,60 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pesawise.app.data.Expense
 import com.pesawise.app.data.ExpenseCategory
+import com.pesawise.app.data.CurrencyRatesRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private fun formatKsh(amount: Double) = "KSh " + String.format(Locale.US, "%,.0f", amount)
+private fun currencySymbol(code: String) = when (code) {
+    "KES" -> "KSh"
+    "USD" -> "$"
+    "EUR" -> "€"
+    "GBP" -> "£"
+    "UGX" -> "USh"
+    "TZS" -> "TSh"
+    else -> code
+}
+private fun formatCurrency(amount: Double, currencyCode: String) = "${currencySymbol(currencyCode)} " + String.format(Locale.US, "%,.0f", amount)
+private fun visibleAmount(amount: Double, currencyCode: String, hidden: Boolean) = if (hidden) "••••••" else formatCurrency(amount, currencyCode)
 private fun formatDate(millis: Long) =
     SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(millis))
 
 @Composable
-fun ExpenseTrackingScreen(viewModel: ExpenseViewModel = viewModel()) {
+fun ExpenseTrackingScreen(
+    currencyCode: String = "KES",
+    hideAmounts: Boolean = false,
+    viewModel: ExpenseViewModel = viewModel()
+) {
+    val context = LocalContext.current
+    val ratesRepository = remember { CurrencyRatesRepository(context) }
     val allExpenses by viewModel.expenses.collectAsState()
     val visible by viewModel.visibleExpenses.collectAsState()
     val filter by viewModel.filter.collectAsState()
     val importing by viewModel.isImporting.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
+    var rates by remember(currencyCode) { mutableStateOf(mapOf(currencyCode to 1.0)) }
+    var loadingRates by remember { mutableStateOf(false) }
+    var missingRates by remember { mutableStateOf(false) }
+    val sourceCurrencies = allExpenses.map { it.currencyCode }.distinct().sorted()
+
+    LaunchedEffect(currencyCode, sourceCurrencies) {
+        loadingRates = true
+        val latestRates = mutableMapOf(currencyCode to 1.0)
+        sourceCurrencies.filter { it != currencyCode }.forEach { sourceCode ->
+            ratesRepository.rate(sourceCode, currencyCode)?.let { latestRates[sourceCode] = it }
+        }
+        rates = latestRates
+        missingRates = sourceCurrencies.any { it !in latestRates }
+        loadingRates = false
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -68,9 +101,24 @@ fun ExpenseTrackingScreen(viewModel: ExpenseViewModel = viewModel()) {
 
             // 3. Total card (all expenses; swap allExpenses -> visible to follow the filter)
             item {
+                if (loadingRates) {
+                    Text("Updating currency conversions…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                } else if (missingRates) {
+                    Text("Some exchange rates are unavailable. Those entries are shown in their original currencies.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                } else if (sourceCurrencies.any { it != currencyCode }) {
+                    Text("Converted to $currencyCode using the latest reference rates.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // Total amount is converted to the selected display currency when rates are available.
+            item {
+                val hasAllRates = allExpenses.all { it.currencyCode in rates }
                 TotalCard(
-                    total = allExpenses.sumOf { it.amount },
-                    count = allExpenses.size
+                    totals = if (hasAllRates) mapOf(currencyCode to allExpenses.sumOf { it.amount * (rates[it.currencyCode] ?: 1.0) })
+                    else allExpenses.groupBy { it.currencyCode }.mapValues { (_, items) -> items.sumOf { it.amount } },
+                    count = allExpenses.size,
+                    hideAmounts = hideAmounts,
+                    showingSelectedCurrency = hasAllRates
                 )
             }
 
@@ -105,7 +153,10 @@ fun ExpenseTrackingScreen(viewModel: ExpenseViewModel = viewModel()) {
                     )
                 }
             } else {
-                items(visible, key = { it.id }) { ExpenseRow(it) }
+                items(visible, key = { it.id }) { expense ->
+                    val rate = rates[expense.currencyCode]
+                    ExpenseRow(expense, hideAmounts, currencyCode, rate)
+                }
             }
 
             item { Spacer(Modifier.height(72.dp)) } // room for the FAB
@@ -116,8 +167,9 @@ fun ExpenseTrackingScreen(viewModel: ExpenseViewModel = viewModel()) {
     if (showDialog) {
         AddExpenseDialog(
             onDismiss = { showDialog = false },
-            onSave = { title, amount, category ->
-                viewModel.addExpense(title, amount, category)
+            currencyCode = currencyCode,
+            onSave = { title, amount, category, code ->
+                viewModel.addExpense(title, amount, category, code)
                 showDialog = false
             }
         )
@@ -157,21 +209,22 @@ private fun UploadCard(importing: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TotalCard(total: Double, count: Int) {
+private fun TotalCard(totals: Map<String, Double>, count: Int, hideAmounts: Boolean, showingSelectedCurrency: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
     ) {
         Column(Modifier.padding(20.dp)) {
-            Text("Total Tracked Expense", color = MaterialTheme.colorScheme.onPrimary)
+            Text(if (!showingSelectedCurrency && totals.size > 1) "Tracked expenses by currency" else "Total Tracked Expense", color = MaterialTheme.colorScheme.onPrimary)
             Spacer(Modifier.height(4.dp))
-            Text(
-                formatKsh(total),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
+            if (hideAmounts) {
+                Text("••••••", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+            } else {
+                totals.toSortedMap().forEach { (code, total) ->
+                    Text(visibleAmount(total, code, false), style = if (totals.size == 1) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                }
+            }
             Text(
                 "$count ${if (count == 1) "expense" else "expenses"}",
                 style = MaterialTheme.typography.bodyMedium,
@@ -182,7 +235,7 @@ private fun TotalCard(total: Double, count: Int) {
 }
 
 @Composable
-private fun ExpenseRow(expense: Expense) {
+private fun ExpenseRow(expense: Expense, hideAmounts: Boolean, displayCurrencyCode: String, rate: Double?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -210,7 +263,9 @@ private fun ExpenseRow(expense: Expense) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text("- ${formatKsh(expense.amount)}", fontWeight = FontWeight.Bold)
+            val shownCode = if (rate == null) expense.currencyCode else displayCurrencyCode
+            val shownAmount = if (rate == null) expense.amount else expense.amount * rate
+            Text("- ${visibleAmount(shownAmount, shownCode, hideAmounts)}", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -218,7 +273,8 @@ private fun ExpenseRow(expense: Expense) {
 @Composable
 private fun AddExpenseDialog(
     onDismiss: () -> Unit,
-    onSave: (String, Double, ExpenseCategory) -> Unit
+    currencyCode: String,
+    onSave: (String, Double, ExpenseCategory, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
@@ -245,7 +301,7 @@ private fun AddExpenseDialog(
                     onValueChange = { input ->
                         if (input.all { it.isDigit() || it == '.' }) amountText = input
                     },
-                    label = { Text("Amount (KSh)") },
+                    label = { Text("Amount ($currencyCode)") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -273,7 +329,7 @@ private fun AddExpenseDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = { onSave(title, amount!!, category) }) { Text("Save") }
+            TextButton(enabled = valid, onClick = { onSave(title, amount!!, category, currencyCode) }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

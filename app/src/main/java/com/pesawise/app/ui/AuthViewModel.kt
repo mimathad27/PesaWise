@@ -25,6 +25,26 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
 
     fun update(transform: (AuthUiState) -> AuthUiState) { state.value = transform(state.value) }
 
+    fun signInWithGoogle(idToken: String) {
+        update { it.copy(busy = true, message = null, isError = false) }
+        viewModelScope.launch {
+            val result = repository.signInWithGoogle(idToken)
+            update {
+                it.copy(
+                    busy = false,
+                    message = result.fold({ msg -> msg }, { error ->
+                        when ((error as? com.google.firebase.auth.FirebaseAuthException)?.errorCode) {
+                            "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL" -> "An account already exists with this email. Sign in with your password first."
+                            else -> error.message ?: "Google sign-in failed. Please try again."
+                        }
+                    }),
+                    isError = result.isFailure,
+                    loggedIn = result.isSuccess
+                )
+            }
+        }
+    }
+
     fun submit() {
         val current = state.value
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(current.email.trim()).matches()) {
