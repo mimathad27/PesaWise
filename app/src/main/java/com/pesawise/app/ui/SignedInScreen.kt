@@ -1,14 +1,17 @@
 package com.pesawise.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -19,13 +22,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.LockReset
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -49,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pesawise.app.data.AuthRepository
@@ -129,19 +137,17 @@ private fun AccountScreen(
     val initial = displayName.firstOrNull()?.uppercase() ?: "P"
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(24.dp))
         Text("Account", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Manage your profile and security.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        Spacer(Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer).padding(20.dp),
+                .background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 18.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Box(
                 modifier = Modifier.size(58.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
@@ -149,53 +155,73 @@ private fun AccountScreen(
             ) {
                 Text(initial, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             }
-            Column {
-                Text(displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.weight(1f)) {
+                Text(displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = { nameDraft = displayName; showNameDialog = true }) {
+                Icon(Icons.Filled.Edit, contentDescription = "Edit profile name", tint = MaterialTheme.colorScheme.primary)
             }
         }
-        TextButton(onClick = { nameDraft = displayName; showNameDialog = true }) { Text("Edit name") }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(8.dp))
         Text("Preferences", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        PreferencePicker(
-            title = "Display currency",
-            value = settings.currencyCode,
-            options = listOf("KES", "USD", "EUR", "GBP", "UGX", "TZS"),
-            onSelect = { code -> appSettings.update { it.copy(currencyCode = code) } }
-        )
-        PreferencePicker(
-            title = "Email language",
-            value = if (settings.languageCode == "sw") "Kiswahili" else "English",
-            options = listOf("English", "Kiswahili"),
-            onSelect = { language ->
-                val code = if (language == "Kiswahili") "sw" else "en"
-                appSettings.update { it.copy(languageCode = code) }
-                authRepository.setLanguageCode(code)
-            }
-        )
-        PreferencePicker(
-            title = "Budget cycle",
-            value = settings.budgetCycle,
-            options = listOf("Monthly", "Weekly", "Every 2 weeks"),
-            onSelect = { cycle -> appSettings.update { it.copy(budgetCycle = cycle) } }
-        )
-        ListItem(
-            headlineContent = { Text("Privacy mode") },
-            supportingContent = { Text("Hide balances and amounts on this device") },
-            trailingContent = {
+        SettingsGroup {
+            PreferencePicker(
+                title = "Display currency",
+                value = settings.currencyCode,
+                icon = Icons.Filled.CurrencyExchange,
+                options = listOf("KES", "USD", "EUR", "GBP", "UGX", "TZS"),
+                onSelect = { code -> appSettings.update { it.copy(currencyCode = code) } }
+            )
+            PreferenceDivider()
+            PreferencePicker(
+                title = "Budget cycle",
+                value = settings.budgetCycle,
+                icon = Icons.Filled.CalendarMonth,
+                options = listOf("Monthly", "Weekly", "Every 2 weeks"),
+                onSelect = { cycle -> appSettings.update { it.copy(budgetCycle = cycle) } }
+            )
+            PreferenceDivider()
+            PreferencePicker(
+                title = "Reset email language",
+                value = if (settings.languageCode == "sw") "Kiswahili" else "English",
+                icon = Icons.Filled.Language,
+                options = listOf("English", "Kiswahili"),
+                onSelect = { language ->
+                    val code = if (language == "Kiswahili") "sw" else "en"
+                    appSettings.update { it.copy(languageCode = code) }
+                    authRepository.setLanguageCode(code)
+                }
+            )
+            PreferenceDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 78.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Icon(Icons.Filled.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Text("Privacy mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    Text("Hide balances and amounts", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Switch(checked = settings.privacyMode, onCheckedChange = { enabled -> appSettings.update { it.copy(privacyMode = enabled) } })
             }
-        )
-        Text("Budgets and expense entries display in this currency. Existing records are converted with the latest available reference rate; saved amounts stay in their original currency.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(8.dp))
         Text("Security", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        ListItem(
-            headlineContent = { Text("Password & security") },
-            supportingContent = { Text("Email a secure password reset link") },
-            leadingContent = { Icon(Icons.Filled.LockReset, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            trailingContent = {
+        SettingsGroup {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 78.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Icon(Icons.Filled.LockReset, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Text("Password reset", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    Text("Send a secure link to your email", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 TextButton(
                     enabled = !sendingReset && email.isNotBlank(),
                     onClick = {
@@ -210,25 +236,24 @@ private fun AccountScreen(
                     }
                 ) { Text(if (sendingReset) "Sending…" else "Reset") }
             }
-        )
-        feedback?.let {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp)) {
-                Text(it, modifier = Modifier.fillMaxWidth().padding(14.dp), color = MaterialTheme.colorScheme.onSecondaryContainer)
+            feedback?.let {
+                PreferenceDivider()
+                Text(it, modifier = Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
 
-        Spacer(Modifier.height(18.dp))
-        Button(
-            onClick = onLogout,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-        ) {
-            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
-            Spacer(Modifier.size(10.dp))
-            Text("Log out", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        SettingsGroup {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(62.dp).clickable(onClick = onLogout).padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Text("Log out", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
+            }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
     }
 
     if (showNameDialog) {
@@ -254,20 +279,48 @@ private fun AccountScreen(
 }
 
 @Composable
-private fun PreferencePicker(title: String, value: String, options: List<String>, onSelect: (String) -> Unit) {
+private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+private fun PreferenceDivider() {
+    HorizontalDivider(Modifier.padding(start = 54.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
+}
+
+@Composable
+private fun PreferencePicker(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    options: List<String>,
+    onSelect: (String) -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(value) },
-        trailingContent = {
-            Box {
-                TextButton(onClick = { expanded = true }) { Text("Change") }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    options.forEach { option ->
-                        DropdownMenuItem(text = { Text(option) }, onClick = { onSelect(option); expanded = false })
-                    }
-                }
+    Box {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable { expanded = true }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Filled.ExpandMore, contentDescription = "Choose $title", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(text = { Text(option) }, onClick = { onSelect(option); expanded = false })
             }
         }
-    )
+    }
 }
