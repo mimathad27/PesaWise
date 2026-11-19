@@ -8,7 +8,6 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
+import com.pesawise.app.ui.theme.PesaInterFontFamily
 
 private val Navy = Color(0xFF142B42)
 private val Green = Color(0xFF0AAD62)
@@ -57,10 +57,8 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(38.dp))
-            Text("PesaWise", fontSize = 25.sp, fontWeight = FontWeight.Medium, color = Navy)
-            Spacer(Modifier.height(5.dp))
-            Text("Your smart financial journey", color = Slate, fontSize = 14.sp)
-            Spacer(Modifier.height(42.dp))
+            Text("PesaWise", fontSize = 25.sp, fontWeight = FontWeight.Medium, color = Navy, fontFamily = PesaInterFontFamily)
+            Spacer(Modifier.height(135.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -69,16 +67,11 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
             ) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 26.dp)) {
                     Text(
-                        if (state.isForgotPassword) "Forgot password?" else if (state.isSignUp) "Create an account" else "Welcome back",
+                        if (state.isForgotPassword) "Forgot password?" else if (state.isSignUp) "Create an Account?" else "Welcome to PesaWise\nLog in now!",
                         modifier = Modifier.fillMaxWidth(), fontSize = 25.sp,
-                        fontWeight = FontWeight.SemiBold, color = Navy, textAlign = TextAlign.Center
+                        fontWeight = FontWeight.SemiBold, color = Navy, textAlign = TextAlign.Center, fontFamily = PesaInterFontFamily
                     )
-                    Spacer(Modifier.height(7.dp))
-                    Text(
-                        if (state.isForgotPassword) "We’ll email you a link to reset it." else if (state.isSignUp) "A clearer view of your money starts here." else "Log in to continue your journey.",
-                        modifier = Modifier.fillMaxWidth(), color = Slate, fontSize = 14.sp, textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(30.dp))
                     if (!state.isForgotPassword) Spacer(Modifier.height(4.dp))
                     if (state.isSignUp && !state.isForgotPassword) AuthField("Full name", state.fullName, { value -> viewModel.update { it.copy(fullName = value) } })
                     AuthField("Email address", state.email, { value -> viewModel.update { it.copy(email = value) } }, KeyboardType.Email)
@@ -161,8 +154,6 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
                     }
                 }
             }
-            Text("By continuing, you agree to our Terms of Service and Privacy Policy.", color = Color(0xFF8293A2), fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp))
-            Spacer(Modifier.height(12.dp))
         }
     }
 }
