@@ -55,21 +55,38 @@ private fun monthBounds(offset: Int = 0): Pair<Long, Long> {
     return start to calendar.timeInMillis
 }
 
+private fun monthBoundsFrom(monthStart: Long, offset: Int = 0): Pair<Long, Long> {
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = monthStart
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        add(Calendar.MONTH, offset)
+    }
+    val start = calendar.timeInMillis
+    calendar.add(Calendar.MONTH, 1)
+    return start to calendar.timeInMillis
+}
+
+private fun monthLabel(monthStart: Long): String = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date(monthStart))
+
 private fun shortDate(millis: Long): String = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(millis))
 
 @Composable
 fun OverviewScreen(
     expenses: List<Expense>, incomes: List<IncomeEntity>, currencyCode: String, hideAmounts: Boolean,
+    selectedMonthStart: Long, onMonthSelected: (Long) -> Unit,
     onOpenTransactions: () -> Unit, onOpenInsights: () -> Unit
 ) {
-    val (start, end) = remember { monthBounds() }
+    var showMonthPicker by remember { mutableStateOf(false) }
+    var draftMonthStart by remember { mutableLongStateOf(selectedMonthStart) }
+    val (start, end) = remember(selectedMonthStart) { monthBoundsFrom(selectedMonthStart) }
     val monthExpenses = expenses.filter { it.dateMillis in start until end && it.currencyCode == currencyCode }
     val monthIncome = incomes.filter { it.dateMillis in start until end && it.currencyCode == currencyCode }
     val spent = monthExpenses.sumOf { it.amount }
     val earned = monthIncome.sumOf { it.amount }
     val categorySpend = ExpenseCategory.values().map { category -> category to monthExpenses.filter { it.category == category }.sumOf { it.amount } }.filter { it.second > 0 }.sortedByDescending { it.second }
     val months = (5 downTo 0).map { offset ->
-        val (from, to) = monthBounds(-offset)
+        val (from, to) = monthBoundsFrom(selectedMonthStart, -offset)
         expenses.filter { it.dateMillis in from until to && it.currencyCode == currencyCode }.sumOf { it.amount }
     }
     LazyColumn(Modifier.fillMaxSize().background(WarmCanvas), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -77,14 +94,16 @@ fun OverviewScreen(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("PesaWise", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = WarmInk)
-                    Text(SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date()), style = MaterialTheme.typography.bodyMedium, color = MutedInk)
+                    Text(monthLabel(selectedMonthStart), style = MaterialTheme.typography.bodyMedium, color = MutedInk)
                 }
-                Icon(Icons.Filled.CalendarMonth, contentDescription = "Current month", tint = MutedInk)
+                IconButton(onClick = { draftMonthStart = selectedMonthStart; showMonthPicker = true }) {
+                    Icon(Icons.Filled.CalendarMonth, contentDescription = "Choose dashboard month", tint = MutedInk)
+                }
             }
         }
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(25.dp)).background(Color(0xFF0D8F72)).padding(22.dp)) {
-                Text("Spent this month", color = Color.White.copy(alpha = .82f), style = MaterialTheme.typography.titleMedium)
+                Text("Spent in ${monthLabel(selectedMonthStart)}", color = Color.White.copy(alpha = .82f), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(7.dp))
                 Text(amountText(spent, currencyCode, hideAmounts), color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(17.dp))
@@ -103,7 +122,7 @@ fun OverviewScreen(
                 Spacer(Modifier.height(14.dp))
                 SpendingChart(months, Modifier.fillMaxWidth().height(108.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    (5 downTo 0).forEach { offset -> Text(SimpleDateFormat("MMM", Locale.getDefault()).format(Date(monthBounds(-offset).first)), color = MutedInk, style = MaterialTheme.typography.labelSmall) }
+                    (5 downTo 0).forEach { offset -> Text(SimpleDateFormat("MMM", Locale.getDefault()).format(Date(monthBoundsFrom(selectedMonthStart, -offset).first)), color = MutedInk, style = MaterialTheme.typography.labelSmall) }
                 }
             }
         }
@@ -142,7 +161,7 @@ fun OverviewScreen(
                 TextButton(onClick = onOpenTransactions) { Text("See all"); Icon(Icons.AutoMirrored.Filled.ArrowForward, null, modifier = Modifier.size(16.dp)) }
             }
         }
-        val recent = expenses.sortedByDescending { it.dateMillis }.take(3)
+        val recent = monthExpenses.sortedByDescending { it.dateMillis }.take(3)
         if (recent.isEmpty()) item { QuietEmpty("Your recent expenses will appear here.") }
         else items(recent.size) { index ->
             val expense = recent[index]
@@ -155,12 +174,28 @@ fun OverviewScreen(
         }
         item { Spacer(Modifier.height(6.dp)) }
     }
+    if (showMonthPicker) {
+        AlertDialog(
+            onDismissRequest = { showMonthPicker = false },
+            title = { Text("Choose a month") },
+            text = {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(onClick = { draftMonthStart = monthBoundsFrom(draftMonthStart, -1).first }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
+                    Text(monthLabel(draftMonthStart), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = WarmInk)
+                    val currentMonthStart = remember { monthBounds().first }
+                    TextButton(enabled = draftMonthStart < currentMonthStart, onClick = { draftMonthStart = monthBoundsFrom(draftMonthStart, 1).first }) { Text("›", style = MaterialTheme.typography.headlineMedium) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { onMonthSelected(draftMonthStart); showMonthPicker = false }) { Text("Show month") } },
+            dismissButton = { TextButton(onClick = { showMonthPicker = false }) { Text("Cancel") } }
+        )
+    }
 }
 
 @Composable
-fun InsightsScreen(expenses: List<Expense>, currencyCode: String, hideAmounts: Boolean) {
-    val (thisStart, thisEnd) = remember { monthBounds() }
-    val (previousStart, _) = remember { monthBounds(-1) }
+fun InsightsScreen(expenses: List<Expense>, currencyCode: String, hideAmounts: Boolean, selectedMonthStart: Long) {
+    val (thisStart, thisEnd) = remember(selectedMonthStart) { monthBoundsFrom(selectedMonthStart) }
+    val (previousStart, _) = remember(selectedMonthStart) { monthBoundsFrom(selectedMonthStart, -1) }
     val current = expenses.filter { it.dateMillis in thisStart until thisEnd && it.currencyCode == currencyCode }
     val previous = expenses.filter { it.dateMillis in previousStart until thisStart && it.currencyCode == currencyCode }
     val total = current.sumOf { it.amount }
@@ -171,14 +206,14 @@ fun InsightsScreen(expenses: List<Expense>, currencyCode: String, hideAmounts: B
         Triple(category, now, before)
     }.filter { it.second > 0 || it.third > 0 }.sortedByDescending { it.second }
     LazyColumn(Modifier.fillMaxSize().background(WarmCanvas), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { Column { Text("Insights", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = WarmInk); Text("A closer look at your spending", color = MutedInk) } }
+        item { Column { Text("Insights", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = WarmInk); Text("A closer look at ${monthLabel(selectedMonthStart)} spending", color = MutedInk) } }
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).padding(19.dp)) {
-                Text("This month", style = MaterialTheme.typography.titleMedium, color = MutedInk)
+                Text(monthLabel(selectedMonthStart), style = MaterialTheme.typography.titleMedium, color = MutedInk)
                 Text(amountText(total, currencyCode, hideAmounts), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = WarmInk)
                 Spacer(Modifier.height(8.dp))
                 val change = if (previousTotal == 0.0) null else ((total - previousTotal) / previousTotal * 100).toInt()
-                Text(change?.let { "${kotlin.math.abs(it)}% ${if (it > 0) "more" else "less"} than last month" } ?: "Add last month's expenses to compare periods", color = if ((change ?: 0) > 0) Terracotta else Sage, style = MaterialTheme.typography.bodyMedium)
+                Text(change?.let { "${kotlin.math.abs(it)}% ${if (it > 0) "more" else "less"} than ${monthLabel(previousStart)}" } ?: "Add ${monthLabel(previousStart)} expenses to compare periods", color = if ((change ?: 0) > 0) Terracotta else Sage, style = MaterialTheme.typography.bodyMedium)
             }
         }
         item { Text("Category patterns", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = WarmInk) }
@@ -195,7 +230,7 @@ fun InsightsScreen(expenses: List<Expense>, currencyCode: String, hideAmounts: B
                 }
                 LinearProgressIndicator(progress = { if (total > 0) (now / total).toFloat() else 0f }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = CategoryPalette[index % CategoryPalette.size], trackColor = CategoryPalette[index % CategoryPalette.size].copy(alpha = .14f))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${if (total > 0) (now / total * 100).toInt() else 0}% of this month's spending", color = MutedInk, style = MaterialTheme.typography.bodySmall)
+                    Text("${if (total > 0) (now / total * 100).toInt() else 0}% of ${monthLabel(selectedMonthStart)} spending", color = MutedInk, style = MaterialTheme.typography.bodySmall)
                     Text(difference?.let { "${if (it > 0) "+" else ""}$it% vs last month" } ?: "New this month", color = if ((difference ?: 0) > 0) Terracotta else Sage, style = MaterialTheme.typography.bodySmall)
                 }
             }

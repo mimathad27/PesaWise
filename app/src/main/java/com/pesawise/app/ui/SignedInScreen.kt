@@ -52,9 +52,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,6 +73,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedMonthStart by rememberSaveable {
+        mutableLongStateOf(java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.DAY_OF_MONTH, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis)
+    }
     val userId = authRepository.currentUserId()
     val stateHolder = rememberSaveableStateHolder()
     val context = LocalContext.current
@@ -115,9 +123,10 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
                     0 -> OverviewScreen(
                         expenses = expenses.map(com.pesawise.app.data.ExpenseEntity::toExpense), incomes = incomes,
                         currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode,
+                        selectedMonthStart = selectedMonthStart, onMonthSelected = { selectedMonthStart = it },
                         onOpenTransactions = { selectedTab = 2 }, onOpenInsights = { selectedTab = 1 }
                     )
-                    1 -> InsightsScreen(expenses.map(com.pesawise.app.data.ExpenseEntity::toExpense), settings.currencyCode, settings.privacyMode)
+                    1 -> InsightsScreen(expenses.map(com.pesawise.app.data.ExpenseEntity::toExpense), settings.currencyCode, settings.privacyMode, selectedMonthStart)
                     2 -> if (userId != null) {
                         ExpenseTrackingScreen(userId = userId, currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode, incomes = incomes,
                             onAddIncome = { title, amount, date -> scope.launch { database.financeDao().addIncome(com.pesawise.app.data.IncomeEntity(userId = userId, title = title, amount = amount, dateMillis = date, currencyCode = settings.currencyCode)) } },
