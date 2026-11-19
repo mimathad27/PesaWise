@@ -11,9 +11,9 @@ import androidx.compose.ui.text.font.FontWeight
 import com.pesawise.app.R
 
 val PesaNavy = Color(0xFF102A43)
-val PesaGreen = Color(0xFF0B8F70)
-val PesaCanvas = Color(0xFFF5F8FA)
-val PesaSlate = Color(0xFF627D98)
+val PesaGreen = Color(0xFF0D8F72)
+val PesaCanvas = Color(0xFFF7F5F0)
+val PesaSlate = Color(0xFF707781)
 val PesaInterFontFamily = FontFamily(
     Font(R.font.inter_variable, weight = FontWeight.Normal),
     Font(R.font.inter_variable, weight = FontWeight.Bold)
@@ -26,7 +26,7 @@ private val PesaDmSansFontFamily = FontFamily(
 private val Colors = lightColorScheme(
     primary = PesaGreen,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD9F2EA),
+    primaryContainer = Color(0xFFDCEEE7),
     onPrimaryContainer = PesaNavy,
     secondary = PesaNavy,
     onSecondary = Color.White,
@@ -34,7 +34,7 @@ private val Colors = lightColorScheme(
     onBackground = PesaNavy,
     surface = Color.White,
     onSurface = PesaNavy,
-    surfaceVariant = Color(0xFFE4EBF1),
+    surfaceVariant = Color(0xFFE9E6E0),
     onSurfaceVariant = PesaSlate
 )
 

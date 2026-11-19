@@ -30,6 +30,10 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,6 +49,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pesawise.app.data.AuthRepository
+import com.pesawise.app.data.PesaWiseDatabase
 import kotlinx.coroutines.launch
 
 @Composable
@@ -70,27 +76,35 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
     val context = LocalContext.current
     val appSettings = remember { AppSettingsStore(context) }
     val settings by appSettings.state
+    val database = remember(context) { PesaWiseDatabase.getInstance(context) }
+    val expenses by remember(userId) { userId?.let(database.expenseDao()::observeForUser) ?: kotlinx.coroutines.flow.flowOf(emptyList<com.pesawise.app.data.ExpenseEntity>()) }.collectAsState(initial = emptyList())
+    val incomes by remember(userId) { userId?.let(database.financeDao()::observeIncomes) ?: kotlinx.coroutines.flow.flowOf(emptyList<com.pesawise.app.data.IncomeEntity>()) }.collectAsState(initial = emptyList())
+    val subscriptions by remember(userId) { userId?.let(database.financeDao()::observeSubscriptions) ?: kotlinx.coroutines.flow.flowOf(emptyList<com.pesawise.app.data.SubscriptionEntity>()) }.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = androidx.compose.ui.graphics.Color(0xFFF1ECEF)) {
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null) },
-                    label = { Text("Expenses") }
+                    icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                    label = { Text("Home", maxLines = 1) }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Filled.PieChart, contentDescription = null) },
-                    label = { Text("Budget") }
+                    icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
+                    label = { Text("Insights", maxLines = 1) }
                 )
+                NavigationBarItem(selected = selectedTab == 2, onClick = { selectedTab = 2 }, icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, null) }, label = { Text("Activity", maxLines = 1) })
+                NavigationBarItem(selected = selectedTab == 3, onClick = { selectedTab = 3 }, icon = { Icon(Icons.Filled.Subscriptions, null) }, label = { Text("Subs", maxLines = 1) })
+                NavigationBarItem(selected = selectedTab == 4, onClick = { selectedTab = 4 }, icon = { Icon(Icons.Filled.AccountBalanceWallet, null) }, label = { Text("Budget", maxLines = 1) })
                 NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
+                    selected = selectedTab == 5,
+                    onClick = { selectedTab = 5 },
                     icon = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
-                    label = { Text("Account") }
+                    label = { Text("Account", maxLines = 1) }
                 )
             }
         }
@@ -98,12 +112,26 @@ fun SignedInScreen(authViewModel: AuthViewModel, authRepository: AuthRepository)
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             stateHolder.SaveableStateProvider(key = selectedTab) {
                 when (selectedTab) {
-                    0 -> if (userId != null) {
-                        ExpenseTrackingScreen(userId = userId, currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode)
+                    0 -> OverviewScreen(
+                        expenses = expenses.map(com.pesawise.app.data.ExpenseEntity::toExpense), incomes = incomes,
+                        currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode,
+                        onOpenTransactions = { selectedTab = 2 }, onOpenInsights = { selectedTab = 1 }
+                    )
+                    1 -> InsightsScreen(expenses.map(com.pesawise.app.data.ExpenseEntity::toExpense), settings.currencyCode, settings.privacyMode)
+                    2 -> if (userId != null) {
+                        ExpenseTrackingScreen(userId = userId, currencyCode = settings.currencyCode, hideAmounts = settings.privacyMode, incomes = incomes,
+                            onAddIncome = { title, amount, date -> scope.launch { database.financeDao().addIncome(com.pesawise.app.data.IncomeEntity(userId = userId, title = title, amount = amount, dateMillis = date, currencyCode = settings.currencyCode)) } },
+                            onDeleteIncome = { income -> scope.launch { database.financeDao().deleteIncome(income.id, userId) } })
                     } else {
                         Text("Your session has expired. Please sign in again.", modifier = Modifier.padding(24.dp))
                     }
-                    1 -> BudgetingScreen(currencyCode = settings.currencyCode, budgetCycle = settings.budgetCycle, hideAmounts = settings.privacyMode)
+                    3 -> if (userId != null) SubscriptionsScreen(
+                        subscriptions, settings.currencyCode, settings.privacyMode,
+                        onAdd = { title, amount, code, cycle, nextDate -> scope.launch { database.financeDao().addSubscription(com.pesawise.app.data.SubscriptionEntity(userId = userId, title = title, amount = amount, currencyCode = code, billingCycle = cycle, nextChargeMillis = nextDate)) } },
+                        onToggle = { item, active -> scope.launch { database.financeDao().setSubscriptionActive(item.id, userId, active) } },
+                        onDelete = { item -> scope.launch { database.financeDao().deleteSubscription(item.id, userId) } }
+                    ) else Text("Your session has expired. Please sign in again.", modifier = Modifier.padding(24.dp))
+                    4 -> BudgetingScreen(currencyCode = settings.currencyCode, budgetCycle = settings.budgetCycle, hideAmounts = settings.privacyMode, expenses = expenses.map(com.pesawise.app.data.ExpenseEntity::toExpense))
                     else -> AccountScreen(
                         authRepository = authRepository,
                         appSettings = appSettings,

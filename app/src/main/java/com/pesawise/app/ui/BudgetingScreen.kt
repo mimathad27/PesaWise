@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.sp
 import java.text.NumberFormat
 import java.util.Locale
 import com.pesawise.app.data.CurrencyRatesRepository
+import com.pesawise.app.data.Expense
+import com.pesawise.app.data.ExpenseCategory
 
 private data class BudgetBucket(
     val name: String,
@@ -86,7 +88,7 @@ private fun budgetCurrencySymbol(code: String) = when (code) {
 }
 
 @Composable
-fun BudgetingScreen(currencyCode: String = "KES", budgetCycle: String = "Monthly", hideAmounts: Boolean = false) {
+fun BudgetingScreen(currencyCode: String = "KES", budgetCycle: String = "Monthly", hideAmounts: Boolean = false, expenses: List<Expense> = emptyList()) {
     val context = LocalContext.current
     val ratesRepository = remember { CurrencyRatesRepository(context) }
     var incomeText by rememberSaveable { mutableStateOf("") }
@@ -104,6 +106,14 @@ fun BudgetingScreen(currencyCode: String = "KES", budgetCycle: String = "Monthly
     val allocationTotal = allocation.sum()
     val allocationValid = allocation.all { it in 0..100 } && allocationTotal == 100
     val budgetCurrencyCode = if (incomeCurrencyCode != currencyCode || incomeRateUnavailable) incomeCurrencyCode else currencyCode
+    val cycleStart = java.util.Calendar.getInstance().apply {
+        when (budgetCycle) {
+            "Weekly" -> set(java.util.Calendar.DAY_OF_WEEK, firstDayOfWeek)
+            "Every 2 weeks" -> add(java.util.Calendar.DAY_OF_YEAR, -13)
+            else -> set(java.util.Calendar.DAY_OF_MONTH, 1)
+        }
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
 
     LaunchedEffect(currencyCode) {
         val sourceCode = incomeCurrencyCode
@@ -235,7 +245,14 @@ fun BudgetingScreen(currencyCode: String = "KES", budgetCycle: String = "Monthly
             items(budgetBuckets.size) { index ->
                 val bucket = budgetBuckets[index]
                 val percent = allocation[index]
-                BudgetBucketCard(bucket, percent, income * percent / 100.0, budgetCurrencyCode, budgetCycle, hideAmounts)
+                val actual = expenses.filter { expense ->
+                    expense.dateMillis >= cycleStart && expense.currencyCode == budgetCurrencyCode && when (bucket.name) {
+                        "Needs" -> expense.category in listOf(ExpenseCategory.HOUSING, ExpenseCategory.FOOD, ExpenseCategory.UTILITIES, ExpenseCategory.TRANSPORT)
+                        "Wants" -> expense.category in listOf(ExpenseCategory.ENTERTAINMENT, ExpenseCategory.TRANSFERS)
+                        else -> false
+                    }
+                }.sumOf { it.amount }
+                BudgetBucketCard(bucket, percent, income * percent / 100.0, actual, budgetCurrencyCode, budgetCycle, hideAmounts)
             }
         }
 
@@ -270,7 +287,7 @@ private fun AllocationInput(label: String, value: String, onValueChange: (String
 }
 
 @Composable
-private fun BudgetBucketCard(bucket: BudgetBucket, percent: Int, amount: Double, currencyCode: String, budgetCycle: String, hideAmounts: Boolean) {
+private fun BudgetBucketCard(bucket: BudgetBucket, percent: Int, amount: Double, spent: Double, currencyCode: String, budgetCycle: String, hideAmounts: Boolean) {
     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -284,14 +301,20 @@ private fun BudgetBucketCard(bucket: BudgetBucket, percent: Int, amount: Double,
                 Text("$percent%", color = bucket.color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
             LinearProgressIndicator(
-                progress = { percent / 100f },
+                progress = { if (amount > 0) (spent / amount).toFloat().coerceIn(0f, 1f) else 0f },
                 modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape),
-                color = bucket.color,
+                color = if (amount > 0 && spent > amount) Color(0xFFC97B5C) else bucket.color,
                 trackColor = bucket.color.copy(alpha = .12f)
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Amount per $budgetCycle", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                Text(if (hideAmounts) "••••••" else formatBudgetCurrency(amount, currencyCode), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Column {
+                    Text("Spent this $budgetCycle", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text("Plan: ${if (hideAmounts) "••••••" else formatBudgetCurrency(amount, currencyCode)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(if (hideAmounts) "••••••" else formatBudgetCurrency(spent, currencyCode), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text(if (amount > 0 && spent > amount) "Over plan" else if (amount > 0) "${(spent / amount * 100).toInt()}% used" else "Add income for a plan", color = if (amount > 0 && spent > amount) Color(0xFFC97B5C) else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

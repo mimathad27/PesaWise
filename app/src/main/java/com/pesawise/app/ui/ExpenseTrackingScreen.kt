@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pesawise.app.data.Expense
 import com.pesawise.app.data.ExpenseCategory
+import com.pesawise.app.data.IncomeEntity
 import com.pesawise.app.data.CurrencyRatesRepository
 import com.pesawise.app.data.PesaWiseDatabase
 import java.text.SimpleDateFormat
@@ -47,11 +49,16 @@ private fun visibleAmount(amount: Double, currencyCode: String, hidden: Boolean)
 private fun formatDate(millis: Long) =
     SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(millis))
 
+private data class ActivityEntry(val dateMillis: Long, val key: String, val expense: Expense? = null, val income: IncomeEntity? = null)
+
 @Composable
 fun ExpenseTrackingScreen(
     userId: String,
     currencyCode: String = "KES",
-    hideAmounts: Boolean = false
+    hideAmounts: Boolean = false,
+    incomes: List<IncomeEntity> = emptyList(),
+    onAddIncome: (String, Double, Long) -> Unit = { _, _, _ -> },
+    onDeleteIncome: (IncomeEntity) -> Unit = {}
 ) {
     val context = LocalContext.current
     val ratesRepository = remember { CurrencyRatesRepository(context) }
@@ -68,6 +75,9 @@ fun ExpenseTrackingScreen(
     var rates by remember(currencyCode) { mutableStateOf(mapOf(currencyCode to 1.0)) }
     var loadingRates by remember { mutableStateOf(false) }
     var missingRates by remember { mutableStateOf(false) }
+    var selectedType by rememberSaveable { mutableStateOf("All") }
+    var selectedPeriod by rememberSaveable { mutableStateOf("This month") }
+    var showIncomeDialog by remember { mutableStateOf(false) }
     val sourceCurrencies = allExpenses.map { it.currencyCode }.distinct().sorted()
 
     LaunchedEffect(currencyCode, sourceCurrencies) {
@@ -84,9 +94,9 @@ fun ExpenseTrackingScreen(
     Scaffold(
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { showDialog = true },
+                onClick = { if (selectedType == "Income") showIncomeDialog = true else showDialog = true },
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Add Expense") }
+                text = { Text(if (selectedType == "Income") "Add income" else "Add expense") }
             )
         }
     ) { padding ->
@@ -95,13 +105,31 @@ fun ExpenseTrackingScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. Header
             item {
-                Text(
-                    "Expense Tracking",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text("Transactions", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("Everything coming in and going out", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            item {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .58f)).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("All", "Income", "Expenses").forEach { type ->
+                        val selected = selectedType == type
+                        Surface(onClick = { selectedType = type }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp), color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent) {
+                            Text(type, Modifier.padding(vertical = 11.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
+            if (selectedType != "Expenses") item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { showIncomeDialog = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Text("Add income")
+                    }
+                }
             }
 
             if (message != null) item {
@@ -124,8 +152,7 @@ fun ExpenseTrackingScreen(
                 }
             }
 
-            // Total amount is converted to the selected display currency when rates are available.
-            item {
+            if (selectedType != "Income") item {
                 val hasAllRates = allExpenses.all { it.currencyCode in rates }
                 TotalCard(
                     totals = if (hasAllRates) mapOf(currencyCode to allExpenses.sumOf { it.amount * (rates[it.currencyCode] ?: 1.0) })
@@ -136,8 +163,15 @@ fun ExpenseTrackingScreen(
                 )
             }
 
-            // 4. Filter chips
             item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf("This month", "3 months", "All time")) { period ->
+                        FilterChip(selectedPeriod == period, { selectedPeriod = period }, label = { Text(period) })
+                    }
+                }
+            }
+
+            if (selectedType != "Income") item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
                         FilterChip(
@@ -156,31 +190,45 @@ fun ExpenseTrackingScreen(
                 }
             }
 
-            // 6. Transactions list
-            if (visible.isEmpty()) {
+            val lowerBound = when (selectedPeriod) {
+                "This month" -> java.util.Calendar.getInstance().apply { set(java.util.Calendar.DAY_OF_MONTH, 1); set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+                "3 months" -> java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -3) }.timeInMillis
+                else -> Long.MIN_VALUE
+            }
+            val periodExpenses = allExpenses.filter { it.dateMillis >= lowerBound && (filter == null || it.category == filter) }
+            val periodIncomes = incomes.filter { it.dateMillis >= lowerBound }
+            val showExpenses = selectedType != "Income"
+            val showIncomes = selectedType != "Expenses"
+            val entries = buildList {
+                if (showExpenses) periodExpenses.forEach { add(ActivityEntry(it.dateMillis, "expense-${it.id}", expense = it)) }
+                if (showIncomes) periodIncomes.forEach { add(ActivityEntry(it.dateMillis, "income-${it.id}", income = it)) }
+            }.sortedByDescending { it.dateMillis }
+            if (entries.isEmpty()) {
                 item {
                     Text(
-                        "No expenses in this category yet.",
+                        "Nothing to show for this period yet. Add an income or expense to get started.",
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                items(visible, key = { it.id }) { expense ->
-                    val rate = rates[expense.currencyCode]
-                    ExpenseRow(
-                        expense = expense,
-                        hideAmounts = hideAmounts,
-                        displayCurrencyCode = currencyCode,
-                        rate = rate,
-                        onEdit = { editingExpense = expense },
-                        onDelete = { deletingExpense = expense }
-                    )
+                items(entries, key = { it.key }) { entry ->
+                    entry.income?.let { income -> IncomeRow(income, hideAmounts, onDelete = { onDeleteIncome(income) }) }
+                    entry.expense?.let { expense ->
+                        ExpenseRow(
+                            expense = expense,
+                            hideAmounts = hideAmounts,
+                            displayCurrencyCode = currencyCode,
+                            rate = rates[expense.currencyCode],
+                            onEdit = { editingExpense = expense },
+                            onDelete = { deletingExpense = expense }
+                        )
+                    }
                 }
             }
 
-            item { Spacer(Modifier.height(72.dp)) } // room for the FAB
+            item { Spacer(Modifier.height(72.dp)) }
         }
     }
 
@@ -193,6 +241,10 @@ fun ExpenseTrackingScreen(
                 showDialog = false
             }
         )
+    }
+
+    if (showIncomeDialog) {
+        AddIncomeDialog(currencyCode, onDismiss = { showIncomeDialog = false }, onSave = { title, amount -> onAddIncome(title, amount, System.currentTimeMillis()); showIncomeDialog = false })
     }
 
     editingExpense?.let { expense ->
@@ -308,6 +360,43 @@ private fun ExpenseRow(
             }
         }
     }
+}
+
+@Composable
+private fun IncomeRow(income: IncomeEntity, hideAmounts: Boolean, onDelete: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0xFF8DA38B).copy(alpha = .16f)), contentAlignment = Alignment.Center) {
+                Text("+", color = Color(0xFF648264), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(income.title, fontWeight = FontWeight.SemiBold)
+                Text("Income · ${formatDate(income.dateMillis)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("+ ${visibleAmount(income.amount, income.currencyCode, hideAmounts)}", color = Color(0xFF648264), fontWeight = FontWeight.Bold)
+            IconButton(onClick = onDelete) { Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete income", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
+@Composable
+private fun AddIncomeDialog(currencyCode: String, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
+    var title by remember { mutableStateOf("") }
+    var amountText by remember { mutableStateOf("") }
+    val amount = amountText.toDoubleOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add income") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(title, { title = it }, label = { Text("Source (e.g. Salary)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(amountText, { input -> if (input.all { it.isDigit() || it == '.' }) amountText = input }, label = { Text("Amount ($currencyCode)") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(enabled = title.isNotBlank() && amount != null && amount > 0, onClick = { onSave(title.trim(), amount!!) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
