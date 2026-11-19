@@ -89,14 +89,8 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(OnboardingGreen), Alignment.Center) {
-                        Text("P", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Text("  PesaWise", color = OnboardingNavy, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                }
-                if (!isWelcome) {
+            if (!isWelcome) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onComplete) { Text("Skip", color = OnboardingSlate) }
                 }
             }

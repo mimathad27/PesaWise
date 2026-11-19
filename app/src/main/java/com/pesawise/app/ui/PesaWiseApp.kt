@@ -56,9 +56,7 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(38.dp))
-            Text("PesaWise", fontSize = 25.sp, fontWeight = FontWeight.Medium, color = Navy, fontFamily = PesaInterFontFamily)
-            Spacer(Modifier.height(135.dp))
+            Spacer(Modifier.height(190.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -67,7 +65,7 @@ fun PesaWiseApp(viewModel: AuthViewModel) {
             ) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 26.dp)) {
                     Text(
-                        if (state.isForgotPassword) "Forgot password?" else if (state.isSignUp) "Create an Account?" else "Welcome to PesaWise\nLog in now!",
+                        if (state.isForgotPassword) "Forgot password?" else if (state.isSignUp) "Create an Account?" else "Welcome to PesaWise",
                         modifier = Modifier.fillMaxWidth(), fontSize = 25.sp,
                         fontWeight = FontWeight.SemiBold, color = Navy, textAlign = TextAlign.Center, fontFamily = PesaInterFontFamily
                     )
